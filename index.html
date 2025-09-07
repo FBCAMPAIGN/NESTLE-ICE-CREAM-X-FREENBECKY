@@ -1,103 +1,103 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nestle Ice Cream X FreenBecky</title>
+<html>
+  <head>
+    <title>7-Eleven Ice Cream Stock</title>
+    <style>
+      #map {
+        height: 100vh;
+        width: 100%;
+      }
+      .filter-box {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        padding: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        font-family: Arial, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="filter-box">
+      <label><input type="checkbox" id="chocoFilter" checked> 🍫 Chocolate</label>
+      <label><input type="checkbox" id="strawFilter" checked> 🍓 Strawberry</label>
+    </div>
+    <div id="map"></div>
 
-  <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-  <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
-    h2 {
-      margin: 0;
-      padding: 10px;
-      text-align: center;
-      background: #f8f8f8;
-      border-bottom: 1px solid #ccc;
-    }
-    #map {
-      height: calc(100vh - 50px);
-      width: 100%;
-    }
-    .green { color: green; font-weight: bold; }
-    .red { color: red; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <h2>Nestle Ice Cream X FreenBecky Map</h2>
-  <div id="map"></div>
+    <script>
+      let map;
+      let markers = [];
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      // Dữ liệu mẫu (có thể load từ Excel/Google Sheets)
+      const stores = [
+        { name: "7-11 Siam Square", lat: 13.7464637, lng: 100.5309778, chocolate: true, strawberry: false, update: "2025-09-07" },
+        { name: "7-11 Silom", lat: 13.728, lng: 100.529, chocolate: false, strawberry: true, update: "2025-09-07" },
+        { name: "7-11 Sukhumvit", lat: 13.736, lng: 100.559, chocolate: true, strawberry: true, update: "2025-09-07" }
+      ];
 
-  <script>
-    var map = L.map("map").setView([13.736717, 100.523186], 12);
+      function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+          center: { lat: 13.736, lng: 100.523 },
+          zoom: 13,
+        });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
-    }).addTo(map);
+        renderMarkers();
 
-    // Layer groups
-    var chocoLayer = L.layerGroup().addTo(map);
-    var strawLayer = L.layerGroup().addTo(map);
+        document.getElementById("chocoFilter").addEventListener("change", renderMarkers);
+        document.getElementById("strawFilter").addEventListener("change", renderMarkers);
+      }
 
-    var csvUrl =
-      "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+      function renderMarkers() {
+        // Xóa marker cũ
+        markers.forEach(m => m.setMap(null));
+        markers = [];
 
-    async function loadData() {
-      const response = await fetch(csvUrl);
-      const text = await response.text();
-      const rows = text.trim().split("\n");
+        const showChoco = document.getElementById("chocoFilter").checked;
+        const showStraw = document.getElementById("strawFilter").checked;
 
-      rows.slice(1).forEach((row) => {
-        const cols = row.split(",").map(c => c.trim());
+        stores.forEach(store => {
+          let hasChoco = store.chocolate && showChoco;
+          let hasStraw = store.strawberry && showStraw;
 
-        const store = cols[0];
-        const lat = parseFloat(cols[1]);
-        const lng = parseFloat(cols[2]);
-        const chocolate = cols[3].toLowerCase() === "true";
-        const strawberry = cols[4].toLowerCase() === "true";
-        const lastUpdate = cols[5];
+          // Nếu cửa hàng không có bất kỳ hương vị nào trong filter thì ẩn
+          if (!hasChoco && !hasStraw) return;
 
-        if (!isNaN(lat) && !isNaN(lng)) {
-          let popupContent = `<b>${store}</b><br>`;
+          // Sticker text
+          let flavors = "";
+          if (store.chocolate) flavors += "🍫";
+          if (store.strawberry) flavors += "🍓";
 
-          if (lastUpdate && lastUpdate.trim() !== "") {
-            let flavors = [];
-            flavors.push("🍫 " + (chocolate ? "<span class='green'>✅</span>" : "<span class='red'>❌</span>"));
-            flavors.push("🍓 " + (strawberry ? "<span class='green'>✅</span>" : "<span class='red'>❌</span>"));
-            popupContent += flavors.join("<br>") + `<br>Last update: ${lastUpdate}`;
-          } else {
-            popupContent += "Not updated";
-          }
+          const marker = new google.maps.Marker({
+            position: { lat: store.lat, lng: store.lng },
+            map: map,
+            title: store.name,
+            label: {
+              text: flavors,
+              fontSize: "20px"
+            }
+          });
 
-          let marker = L.marker([lat, lng]).bindPopup(popupContent);
+          const infoWindow = new google.maps.InfoWindow({
+            content: `
+              <b>${store.name}</b><br>
+              ${store.chocolate ? "🍫 <span style='color:green'>✔</span>" : "🍫 <span style='color:red'>✘</span>"}<br>
+              ${store.strawberry ? "🍓 <span style='color:green'>✔</span>" : "🍓 <span style='color:red'>✘</span>"}<br>
+              Last Update: ${store.update || "<span style='color:gray'>Not updated</span>"}
+            `
+          });
 
-          // Add marker vào layer tương ứng
-          if (chocolate) chocoLayer.addLayer(marker);
-          if (strawberry) strawLayer.addLayer(marker);
-        }
-      });
-    }
+          marker.addListener("click", () => {
+            infoWindow.open(map, marker);
+          });
 
-    loadData();
+          markers.push(marker);
+        });
+      }
+    </script>
 
-    // Control cho phép bật/tắt layer
-    var overlayMaps = {
-      "🍫 Chocolate": chocoLayer,
-      "🍓 Strawberry": strawLayer
-    };
-
-    L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
-  </script>
-</body>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
+  </body>
 </html>
