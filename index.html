@@ -3,175 +3,201 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ice Cream Map (Leaflet + CSV)</title>
+  <title>Ice Cream Map</title>
+
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    html,body{height:100%;margin:0;padding:0;font-family:Arial,sans-serif;}
-    header{height:50px;line-height:50px;text-align:center;font-weight:bold;background:#f8f9fa;border-bottom:1px solid #ddd;}
-    #controls{padding:8px;text-align:center;background:#fff;z-index:1000;}
-    #map{height:calc(100vh - 90px);width:100%;}
-    .popup-content{font-size:14px;line-height:1.4;}
-    .legend{background:#fff;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;}
-    .legend .dot{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:50%;vertical-align:middle;}
+    html,body{height:100%;margin:0}
+    header{height:50px;line-height:50px;text-align:center;background:#f8f9fa;border-bottom:1px solid #ddd;font-weight:700}
+    #controls{padding:8px;text-align:center;background:#fff;z-index:1000}
+    #map{height:calc(100vh - 90px);width:100%}
+    .popup-content{font-size:14px}
+    .legend{background:#fff;padding:6px 10px;border:1px solid #ccc;border-radius:6px}
+    .legend .dot{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:50%;vertical-align:middle}
   </style>
 </head>
 <body>
-  <header>🍦 Nestle Ice Cream Map</header>
+  <header>🍦 Nestle Ice Cream X FreenBecky</header>
   <div id="controls">
     <label><input type="checkbox" id="filterChocolate" checked> 🍫 Chocolate</label>
     <label style="margin-left:12px"><input type="checkbox" id="filterStrawberry" checked> 🍓 Strawberry</label>
   </div>
+
   <div id="map"></div>
 
   <!-- Leaflet & PapaParse -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
   <script>
-    // --- CONFIGURE HERE ---
-    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
-    const COLORS = {
-      brown: "#8B4513",
-      red: "#e74c3c",
-      green: "#27ae60",
-      grey: "#95a5a6"
+  const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+
+  const COLORS = {
+    brown: "#8B4513",   // chocolate-only
+    red:   "#e74c3c",   // strawberry-only
+    green: "#27ae60",   // both
+    grey:  "#95a5a6"    // not updated
+  };
+
+  const map = L.map('map').setView([13.736717, 100.523186], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  function createSvgIcon(colorHex) {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="30" height="44" viewBox="0 0 30 44">
+        <defs>
+          <filter id="s" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000" flood-opacity="0.3"/>
+          </filter>
+        </defs>
+        <path filter="url(#s)" d="M15 0C9 0 4 5 4 10c0 7.5 11 22 11 22s11-14.5 11-22c0-5-5-10-11-10z" fill="${colorHex}" stroke="#333" stroke-width="1"/>
+        <circle cx="15" cy="10" r="4" fill="rgba(255,255,255,0.9)"/>
+      </svg>`;
+    const uri = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg.trim());
+    return new L.Icon({
+      iconUrl: uri,
+      iconSize: [30, 44],
+      iconAnchor: [15, 44],
+      popupAnchor: [0, -36],
+      shadowUrl: null
+    });
+  }
+
+  const ICONS = {
+    brown: createSvgIcon(COLORS.brown),
+    red: createSvgIcon(COLORS.red),
+    green: createSvgIcon(COLORS.green),
+    grey: createSvgIcon(COLORS.grey)
+  };
+
+  function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function normalizeRow(row){
+    const norm = {};
+    for(const k in row){
+      const nk = k.trim().toLowerCase().replace(/\s+/g,'');
+      norm[nk] = row[k];
+    }
+    return {
+      store: norm.store || norm.name || '',
+      address: norm.address || '',
+      lat: parseFloat((norm.lat || norm.latitude || '').toString().replace(/,/g,'.')),
+      lng: parseFloat((norm.lng || norm.longitude || '').toString().replace(/,/g,'.')),
+      chocolate: String(norm.chocolate||'').trim().toLowerCase() === 'true',
+      strawberry: String(norm.strawberry||'').trim().toLowerCase() === 'true',
+      lastUpdate: (norm.lastupdate || norm.updated || '').toString().trim()
     };
-    // -------------------------
+  }
 
-    const map = L.map('map').setView([13.736717, 100.523186], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+  let allMarkers = [];
 
-    function createSvgIcon(colorHex) {
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="44">
-          <path d="M15,0 C9,0 4,5 4,10 C4,17.5 15,32 15,32 C15,32 26,17.5 26,10 C26,5 21,0 15,0Z" fill="${colorHex}" stroke="#333" stroke-width="1"/>
-          <circle cx="15" cy="10" r="4" fill="#fff" fill-opacity="0.9"/>
-        </svg>`;
-      const uri = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg.trim());
-      return new L.Icon({
-        iconUrl: uri,
-        iconSize: [30, 44],
-        iconAnchor: [15, 44],
-        popupAnchor: [0, -36]
-      });
+  function buildPopup(d){
+    if(!d.hasUpdate){
+      let addrHtml = d.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.address)}" target="_blank">${escapeHtml(d.address)}</a><br>` : "";
+      return `<div class="popup-content"><b>${escapeHtml(d.store)}</b><br>${addrHtml}<b>Last update:</b> Not updated yet</div>`;
     }
+    const choc = d.chocolate ? "<span style='color:green'>✅</span>" : "<span style='color:red'>❌</span>";
+    const straw = d.strawberry ? "<span style='color:green'>✅</span>" : "<span style='color:red'>❌</span>";
+    let addrHtml = d.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.address)}" target="_blank">${escapeHtml(d.address)}</a><br>` : "";
+    return `<div class="popup-content"><b>${escapeHtml(d.store)}</b><br>${addrHtml}<b>Last update:</b> ${escapeHtml(d.lastUpdate)}<br>🍫 ${choc}<br>🍓 ${straw}</div>`;
+  }
 
-    const ICONS = {
-      brown: createSvgIcon(COLORS.brown),
-      red: createSvgIcon(COLORS.red),
-      green: createSvgIcon(COLORS.green),
-      grey: createSvgIcon(COLORS.grey)
-    };
+  Papa.parse(csvUrl, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: function(res){
+      const data = res.data;
+      const markersForBounds = [];
+      data.forEach(rawRow => {
+        const r = normalizeRow(rawRow);
+        if (Number.isNaN(r.lat) || Number.isNaN(r.lng)) return;
 
-    function escapeHtml(s) {
-      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
+        const hasUpdate = r.lastUpdate && r.lastUpdate !== '' && r.lastUpdate.toLowerCase() !== 'false';
+        const markerData = {
+          store: r.store || 'No name',
+          address: r.address || '',
+          lat: r.lat,
+          lng: r.lng,
+          chocolate: !!r.chocolate,
+          strawberry: !!r.strawberry,
+          hasUpdate,
+          lastUpdate: r.lastUpdate || ''
+        };
 
-    function normalizeRow(r) {
-      const norm = {};
-      for (let k in r) {
-        norm[k.trim().toLowerCase().replace(/\s+/g,'')] = r[k];
-      }
-      return {
-        store: norm.store || norm.name || '',
-        address: norm.address || '',
-        lat: parseFloat((norm.lat || norm.latitude || '').replace(/,/g, '.')),
-        lng: parseFloat((norm.lng || norm.longitude || '').replace(/,/g, '.')),
-        chocolate: (norm.chocolate || '').toLowerCase() === 'true',
-        strawberry: (norm.strawberry || '').toLowerCase() === 'true',
-        lastupdate: norm['lastupdate'] || norm['last-update'] || ''
-      };
-    }
-
-    function buildPopup(d) {
-      let html = `<div class="popup-content"><b>${escapeHtml(d.store)}</b><br>`;
-      if (d.address) html += `${escapeHtml(d.address)}<br>`;
-      if (d.hasUpdate) {
-        html += `<b>Last update:</b> ${escapeHtml(d.lastupdate)}<br>`;
-        html += `🍫 ${d.chocolate ? '✅' : '❌'}<br>`;
-        html += `🍓 ${d.strawberry ? '✅' : '❌'}`;
-      } else {
-        html += `<i>Not updated</i>`;
-      }
-      html += `</div>`;
-      return html;
-    }
-
-    let allMarkers = [];
-
-    Papa.parse(csvUrl, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete(res) {
-        let group = [];
-        res.data.forEach(row => {
-          const d = normalizeRow(row);
-          if (Number.isNaN(d.lat) || Number.isNaN(d.lng)) return;
-
-          d.hasUpdate = !!d.lastupdate && d.lastupdate.trim() !== '';
-
-          let icon = ICONS.grey;
-          if (d.hasUpdate) {
-            if (d.chocolate && d.strawberry) icon = ICONS.green;
-            else if (d.chocolate) icon = ICONS.brown;
-            else if (d.strawberry) icon = ICONS.red;
-          }
-
-          const marker = L.marker([d.lat, d.lng], { icon })
-            .bindPopup(buildPopup(d))
-            .addTo(map);
-
-          marker.storeData = d;
-          allMarkers.push(marker);
-          group.push(marker);
-        });
-
-        if (group.length) {
-          const fg = L.featureGroup(group);
-          map.fitBounds(fg.getBounds().pad(0.05));
+        let icon;
+        if (!hasUpdate) {
+          icon = ICONS.grey;
+        } else if (markerData.chocolate && markerData.strawberry) {
+          icon = ICONS.green;
+        } else if (markerData.chocolate) {
+          icon = ICONS.brown;
+        } else if (markerData.strawberry) {
+          icon = ICONS.red;
+        } else {
+          icon = ICONS.grey;
         }
 
-        applyFilters();
-      },
-      error(err) {
-        console.error("CSV error:", err);
-        alert("Failed to load CSV — check console.");
+        const marker = L.marker([markerData.lat, markerData.lng], { icon })
+          .bindPopup(buildPopup(markerData));
+
+        marker.storeData = markerData;
+        marker.addTo(map);
+        allMarkers.push(marker);
+        markersForBounds.push(marker);
+      });
+
+      if(markersForBounds.length){
+        const group = L.featureGroup(markersForBounds);
+        map.fitBounds(group.getBounds().pad(0.05));
+      }
+
+      applyFilters();
+    },
+    error: function(err){
+      console.error('CSV load error', err);
+      alert('Error loading CSV — check console.');
+    }
+  });
+
+  function applyFilters(){
+    const showChocolate = document.getElementById('filterChocolate').checked;
+    const showStrawberry = document.getElementById('filterStrawberry').checked;
+
+    allMarkers.forEach(marker => {
+      const d = marker.storeData;
+      if(!d.hasUpdate){
+        if(!map.hasLayer(marker)) map.addLayer(marker);
+        return;
+      }
+      const visible = (d.chocolate && showChocolate) || (d.strawberry && showStrawberry);
+      if(visible){
+        if(!map.hasLayer(marker)) map.addLayer(marker);
+      } else {
+        if(map.hasLayer(marker)) map.removeLayer(marker);
       }
     });
+  }
 
-    function applyFilters() {
-      const showChoco = document.getElementById('filterChocolate').checked;
-      const showStraw = document.getElementById('filterStrawberry').checked;
+  document.getElementById('filterChocolate').addEventListener('change', applyFilters);
+  document.getElementById('filterStrawberry').addEventListener('change', applyFilters);
 
-      allMarkers.forEach(m => {
-        const d = m.storeData;
-        if (!d.hasUpdate) {
-          if (!map.hasLayer(m)) map.addLayer(m);
-          return;
-        }
-        const visible = (d.chocolate && showChoco) || (d.strawberry && showStraw);
-        visible ? map.addLayer(m) : map.removeLayer(m);
-      });
-    }
-
-    document.getElementById('filterChocolate').addEventListener('change', applyFilters);
-    document.getElementById('filterStrawberry').addEventListener('change', applyFilters);
-
-    // Add legend
-    const legend = L.control({ position: 'bottomright' });
-    legend.onAdd = () => {
-      const div = L.DomUtil.create('div', 'legend');
-      div.innerHTML = `
-        <div><span class="dot" style="background:${COLORS.brown}"></span> Chocolate only</div>
-        <div><span class="dot" style="background:${COLORS.red}"></span> Strawberry only</div>
-        <div><span class="dot" style="background:${COLORS.green}"></span> Both flavors</div>
-        <div><span class="dot" style="background:${COLORS.grey}"></span> Not updated</div>
-      `;
-      return div;
-    };
-    legend.addTo(map);
+  const legend = L.control({position:'bottomright'});
+  legend.onAdd = function(){
+    const div = L.DomUtil.create('div','legend');
+    div.innerHTML = `
+      <div style="font-weight:700;margin-bottom:6px">Legend</div>
+      <div><span class="dot" style="background:${COLORS.brown}"></span> Chocolate only</div>
+      <div><span class="dot" style="background:${COLORS.red}"></span> Strawberry only</div>
+      <div><span class="dot" style="background:${COLORS.green}"></span> Both flavors</div>
+      <div><span class="dot" style="background:${COLORS.grey}"></span> Not updated</div>
+    `;
+    return div;
+  };
+  legend.addTo(map);
   </script>
 </body>
 </html>
