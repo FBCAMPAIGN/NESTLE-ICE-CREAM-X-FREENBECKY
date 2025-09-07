@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ice Cream Map</title>
+  <title>Ice Cream Map — 7 Eleven</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -15,6 +15,8 @@
     .popup-content{font-size:14px}
     .legend{background:#fff;padding:6px 10px;border:1px solid #ccc;border-radius:6px}
     .legend .dot{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:50%;vertical-align:middle}
+    .popup-content a {color:#007bff;text-decoration:none}
+    .popup-content a:hover {text-decoration:underline}
   </style>
 </head>
 <body>
@@ -31,20 +33,23 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <script>
+  // ----------------- CONFIG -----------------
   const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
-
+  // colors (hex)
   const COLORS = {
     brown: "#8B4513",   // chocolate-only
     red:   "#e74c3c",   // strawberry-only
     green: "#27ae60",   // both
     grey:  "#95a5a6"    // not updated
   };
+  // ------------------------------------------
 
   const map = L.map('map').setView([13.736717, 100.523186], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map);
 
+  // Create svg marker
   function createSvgIcon(colorHex) {
     const svg = `
       <svg xmlns="http://www.w3.org/2000/svg" width="30" height="44" viewBox="0 0 30 44">
@@ -61,8 +66,7 @@
       iconUrl: uri,
       iconSize: [30, 44],
       iconAnchor: [15, 44],
-      popupAnchor: [0, -36],
-      shadowUrl: null
+      popupAnchor: [0, -36]
     });
   }
 
@@ -73,8 +77,10 @@
     grey: createSvgIcon(COLORS.grey)
   };
 
+  // helper escape
   function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+  // normalize row
   function normalizeRow(row){
     const norm = {};
     for(const k in row){
@@ -83,28 +89,31 @@
     }
     return {
       store: norm.store || norm.name || '',
-      address: norm.address || '',
+      address: norm.address || norm.diachi || '',
       lat: parseFloat((norm.lat || norm.latitude || '').toString().replace(/,/g,'.')),
-      lng: parseFloat((norm.lng || norm.longitude || '').toString().replace(/,/g,'.')),
-      chocolate: String(norm.chocolate||'').trim().toLowerCase() === 'true',
-      strawberry: String(norm.strawberry||'').trim().toLowerCase() === 'true',
-      lastUpdate: (norm.lastupdate || norm.updated || '').toString().trim()
+      lng: parseFloat((norm.lng || norm.lon || norm.longitude || '').toString().replace(/,/g,'.')),
+      chocolate: String(norm.chocolate || '').trim().toLowerCase() === 'true',
+      strawberry: String(norm.strawberry || '').trim().toLowerCase() === 'true',
+      lastUpdate: (norm.lastupdate || '').toString().trim()
     };
   }
 
   let allMarkers = [];
 
+  // build popup
   function buildPopup(d){
+    const addrHtml = d.address 
+      ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('7 Eleven ' + d.address)}" target="_blank">${escapeHtml(d.address)}</a><br>` 
+      : "";
     if(!d.hasUpdate){
-      let addrHtml = d.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.address)}" target="_blank">${escapeHtml(d.address)}</a><br>` : "";
       return `<div class="popup-content"><b>${escapeHtml(d.store)}</b><br>${addrHtml}<b>Last update:</b> Not updated yet</div>`;
     }
     const choc = d.chocolate ? "<span style='color:green'>✅</span>" : "<span style='color:red'>❌</span>";
     const straw = d.strawberry ? "<span style='color:green'>✅</span>" : "<span style='color:red'>❌</span>";
-    let addrHtml = d.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.address)}" target="_blank">${escapeHtml(d.address)}</a><br>` : "";
     return `<div class="popup-content"><b>${escapeHtml(d.store)}</b><br>${addrHtml}<b>Last update:</b> ${escapeHtml(d.lastUpdate)}<br>🍫 ${choc}<br>🍓 ${straw}</div>`;
   }
 
+  // load CSV
   Papa.parse(csvUrl, {
     download: true,
     header: true,
@@ -129,17 +138,11 @@
         };
 
         let icon;
-        if (!hasUpdate) {
-          icon = ICONS.grey;
-        } else if (markerData.chocolate && markerData.strawberry) {
-          icon = ICONS.green;
-        } else if (markerData.chocolate) {
-          icon = ICONS.brown;
-        } else if (markerData.strawberry) {
-          icon = ICONS.red;
-        } else {
-          icon = ICONS.grey;
-        }
+        if (!hasUpdate) icon = ICONS.grey;
+        else if (markerData.chocolate && markerData.strawberry) icon = ICONS.green;
+        else if (markerData.chocolate) icon = ICONS.brown;
+        else if (markerData.strawberry) icon = ICONS.red;
+        else icon = ICONS.grey;
 
         const marker = L.marker([markerData.lat, markerData.lng], { icon })
           .bindPopup(buildPopup(markerData));
@@ -154,7 +157,6 @@
         const group = L.featureGroup(markersForBounds);
         map.fitBounds(group.getBounds().pad(0.05));
       }
-
       applyFilters();
     },
     error: function(err){
@@ -163,6 +165,7 @@
     }
   });
 
+  // filter
   function applyFilters(){
     const showChocolate = document.getElementById('filterChocolate').checked;
     const showStrawberry = document.getElementById('filterStrawberry').checked;
@@ -185,6 +188,7 @@
   document.getElementById('filterChocolate').addEventListener('change', applyFilters);
   document.getElementById('filterStrawberry').addEventListener('change', applyFilters);
 
+  // legend
   const legend = L.control({position:'bottomright'});
   legend.onAdd = function(){
     const div = L.DomUtil.create('div','legend');
