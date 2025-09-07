@@ -43,6 +43,18 @@
       width: 18px;
       height: 18px;
     }
+    .legend {
+      background: white;
+      padding: 6px 10px;
+      line-height: 1.5;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .legend img {
+      vertical-align: middle;
+      margin-right: 5px;
+    }
   </style>
 </head>
 <body>
@@ -70,15 +82,17 @@
       attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
     }).addTo(map);
 
-    var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+    var csvUrl =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
 
     var allMarkers = [];
 
-    // Tạo icon màu
+    // Hàm tạo icon màu
     function createIcon(color) {
       return new L.Icon({
         iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+        shadowUrl:
+          "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],
@@ -87,9 +101,10 @@
     }
 
     var icons = {
-      brown: createIcon("brown"),   // Chocolate
-      red: createIcon("red"),       // Strawberry
-      green: createIcon("green"),   // Both
+      brown: createIcon("brown"), // Chocolate
+      red: createIcon("red"), // Strawberry
+      green: createIcon("green"), // Both
+      grey: createIcon("grey"), // Chưa update
     };
 
     // Hàm tạo marker
@@ -104,7 +119,10 @@
       if (!isNaN(lat) && !isNaN(lng)) {
         let content = `<div class="popup-content"><b>${store}</b><br>`;
 
-        if (lastUpdate && lastUpdate.trim() !== "" && lastUpdate.toLowerCase() !== "false") {
+        let hasUpdate =
+          lastUpdate && lastUpdate.trim() !== "" && lastUpdate.toLowerCase() !== "false";
+
+        if (hasUpdate) {
           content += `<div><b>Last Update:</b> ${lastUpdate}</div>`;
 
           content += `<div class="status">
@@ -124,18 +142,20 @@
 
         // Chọn màu icon
         let iconType;
-        if (chocolate && strawberry) {
+        if (!hasUpdate) {
+          iconType = icons.grey;
+        } else if (chocolate && strawberry) {
           iconType = icons.green;
         } else if (chocolate) {
           iconType = icons.brown;
         } else if (strawberry) {
           iconType = icons.red;
         } else {
-          iconType = icons.red; // fallback
+          iconType = icons.grey;
         }
 
         let marker = L.marker([lat, lng], { icon: iconType }).bindPopup(content);
-        marker.storeData = { chocolate, strawberry, lastUpdate };
+        marker.storeData = { chocolate, strawberry, hasUpdate };
         return marker;
       }
       return null;
@@ -145,9 +165,9 @@
     Papa.parse(csvUrl, {
       download: true,
       header: true,
-      complete: function(results) {
+      complete: function (results) {
         let markers = [];
-        results.data.forEach(row => {
+        results.data.forEach((row) => {
           let marker = createMarker(row);
           if (marker) {
             markers.push(marker);
@@ -160,7 +180,7 @@
           let group = new L.featureGroup(markers);
           map.fitBounds(group.getBounds());
         }
-      }
+      },
     });
 
     // Bộ lọc
@@ -168,11 +188,11 @@
       let showChocolate = document.getElementById("filterChocolate").checked;
       let showStrawberry = document.getElementById("filterStrawberry").checked;
 
-      allMarkers.forEach(marker => {
-        let { chocolate, strawberry, lastUpdate } = marker.storeData;
+      allMarkers.forEach((marker) => {
+        let { chocolate, strawberry, hasUpdate } = marker.storeData;
 
-        if (!lastUpdate || lastUpdate.trim() === "" || lastUpdate.toLowerCase() === "false") {
-          map.removeLayer(marker);
+        if (!hasUpdate) {
+          map.addLayer(marker); // luôn hiển thị marker xám
           return;
         }
 
@@ -190,6 +210,21 @@
 
     document.getElementById("filterChocolate").addEventListener("change", applyFilters);
     document.getElementById("filterStrawberry").addEventListener("change", applyFilters);
+
+    // Thêm chú thích (legend)
+    var legend = L.control({ position: "bottomright" });
+    legend.onAdd = function () {
+      var div = L.DomUtil.create("div", "legend");
+      div.innerHTML = `
+        <b>Legend</b><br>
+        <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-brown.png" width="15"/> Chocolate<br>
+        <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png" width="15"/> Strawberry<br>
+        <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png" width="15"/> Both<br>
+        <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png" width="15"/> Not updated
+      `;
+      return div;
+    };
+    legend.addTo(map);
   </script>
 </body>
 </html>
