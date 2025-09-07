@@ -1,149 +1,177 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nestle Ice Cream X FreenBecky</title>
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ice Cream Map (Leaflet + CSV)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
-    h2 {
-      text-align: center;
-      margin: 10px 0;
-    }
-    #map {
-      height: 100vh;
-      width: 100%;
-    }
-    .filters {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: white;
-      padding: 8px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      font-size: 14px;
-    }
-    .filters label {
-      display: block;
-      margin-bottom: 5px;
-    }
+    html,body{height:100%;margin:0;padding:0;font-family:Arial,sans-serif;}
+    header{height:50px;line-height:50px;text-align:center;font-weight:bold;background:#f8f9fa;border-bottom:1px solid #ddd;}
+    #controls{padding:8px;text-align:center;background:#fff;z-index:1000;}
+    #map{height:calc(100vh - 90px);width:100%;}
+    .popup-content{font-size:14px;line-height:1.4;}
+    .legend{background:#fff;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;}
+    .legend .dot{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:50%;vertical-align:middle;}
   </style>
 </head>
 <body>
-  <h2>Nestle Ice Cream X FreenBecky Map</h2>
+  <header>🍦 Nestle Ice Cream Map</header>
+  <div id="controls">
+    <label><input type="checkbox" id="filterChocolate" checked> 🍫 Chocolate</label>
+    <label style="margin-left:12px"><input type="checkbox" id="filterStrawberry" checked> 🍓 Strawberry</label>
+  </div>
   <div id="map"></div>
 
-  <!-- Bộ lọc -->
-  <div class="filters">
-    <label><input type="checkbox" id="filterChocolate" checked> Chocolate 🍫</label>
-    <label><input type="checkbox" id="filterStrawberry" checked> Strawberry 🍓</label>
-  </div>
-
-  <!-- Leaflet JS -->
+  <!-- Leaflet & PapaParse -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- PapaParse để đọc CSV -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script>
-    var map = L.map('map').setView([13.736717, 100.523186], 6); // Thailand center
+    // --- CONFIGURE HERE ---
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+    const COLORS = {
+      brown: "#8B4513",
+      red: "#e74c3c",
+      green: "#27ae60",
+      grey: "#95a5a6"
+    };
+    // -------------------------
 
-    // OpenStreetMap tiles
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const map = L.map('map').setView([13.736717, 100.523186], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    let allMarkers = [];
+    function createSvgIcon(colorHex) {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="44">
+          <path d="M15,0 C9,0 4,5 4,10 C4,17.5 15,32 15,32 C15,32 26,17.5 26,10 C26,5 21,0 15,0Z" fill="${colorHex}" stroke="#333" stroke-width="1"/>
+          <circle cx="15" cy="10" r="4" fill="#fff" fill-opacity="0.9"/>
+        </svg>`;
+      const uri = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg.trim());
+      return new L.Icon({
+        iconUrl: uri,
+        iconSize: [30, 44],
+        iconAnchor: [15, 44],
+        popupAnchor: [0, -36]
+      });
+    }
 
-    // CSV link
-    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+    const ICONS = {
+      brown: createSvgIcon(COLORS.brown),
+      red: createSvgIcon(COLORS.red),
+      green: createSvgIcon(COLORS.green),
+      grey: createSvgIcon(COLORS.grey)
+    };
+
+    function escapeHtml(s) {
+      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function normalizeRow(r) {
+      const norm = {};
+      for (let k in r) {
+        norm[k.trim().toLowerCase().replace(/\s+/g,'')] = r[k];
+      }
+      return {
+        store: norm.store || norm.name || '',
+        address: norm.address || '',
+        lat: parseFloat((norm.lat || norm.latitude || '').replace(/,/g, '.')),
+        lng: parseFloat((norm.lng || norm.longitude || '').replace(/,/g, '.')),
+        chocolate: (norm.chocolate || '').toLowerCase() === 'true',
+        strawberry: (norm.strawberry || '').toLowerCase() === 'true',
+        lastupdate: norm['lastupdate'] || norm['last-update'] || ''
+      };
+    }
+
+    function buildPopup(d) {
+      let html = `<div class="popup-content"><b>${escapeHtml(d.store)}</b><br>`;
+      if (d.address) html += `${escapeHtml(d.address)}<br>`;
+      if (d.hasUpdate) {
+        html += `<b>Last update:</b> ${escapeHtml(d.lastupdate)}<br>`;
+        html += `🍫 ${d.chocolate ? '✅' : '❌'}<br>`;
+        html += `🍓 ${d.strawberry ? '✅' : '❌'}`;
+      } else {
+        html += `<i>Not updated</i>`;
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    let allMarkers = [];
 
     Papa.parse(csvUrl, {
       download: true,
       header: true,
-      complete: function(results) {
-        results.data.forEach(row => {
-          let name = row.Name || "Unknown";
-          let address = row.Address || "";
-          let lat = parseFloat(row.Latitude);
-          let lng = parseFloat(row.Longitude);
-          let chocolate = row.Chocolate === "TRUE";
-          let strawberry = row.Strawberry === "TRUE";
-          let lastUpdate = row.LastUpdate;
+      skipEmptyLines: true,
+      complete(res) {
+        let group = [];
+        res.data.forEach(row => {
+          const d = normalizeRow(row);
+          if (Number.isNaN(d.lat) || Number.isNaN(d.lng)) return;
 
-          if (!isNaN(lat) && !isNaN(lng)) {
-            let iconColor = "gray";
-            if (lastUpdate && lastUpdate.trim() !== "") {
-              if (chocolate || strawberry) {
-                iconColor = "red"; // có vị
-              } else {
-                iconColor = "blue"; // đã update nhưng không còn hàng
-              }
-            }
+          d.hasUpdate = !!d.lastupdate && d.lastupdate.trim() !== '';
 
-            let marker = L.circleMarker([lat, lng], {
-              radius: 8,
-              fillColor: iconColor,
-              color: "#000",
-              weight: 1,
-              opacity: 1,
-              fillOpacity: 0.8
-            }).addTo(map);
-
-            // Nội dung popup
-            let popupHtml = `<b>${name}</b><br>${address}<br>`;
-            if (lastUpdate && lastUpdate.trim() !== "") {
-              popupHtml += `Last update: ${lastUpdate}<br>`;
-              popupHtml += `Chocolate: ${chocolate ? "✅" : "❌"}<br>`;
-              popupHtml += `Strawberry: ${strawberry ? "✅" : "❌"}`;
-            } else {
-              popupHtml += `<i>Not updated</i>`;
-            }
-
-            marker.bindPopup(popupHtml);
-
-            allMarkers.push({
-              marker: marker,
-              data: { chocolate, strawberry, lastUpdate }
-            });
+          let icon = ICONS.grey;
+          if (d.hasUpdate) {
+            if (d.chocolate && d.strawberry) icon = ICONS.green;
+            else if (d.chocolate) icon = ICONS.brown;
+            else if (d.strawberry) icon = ICONS.red;
           }
+
+          const marker = L.marker([d.lat, d.lng], { icon })
+            .bindPopup(buildPopup(d))
+            .addTo(map);
+
+          marker.storeData = d;
+          allMarkers.push(marker);
+          group.push(marker);
         });
+
+        if (group.length) {
+          const fg = L.featureGroup(group);
+          map.fitBounds(fg.getBounds().pad(0.05));
+        }
+
+        applyFilters();
+      },
+      error(err) {
+        console.error("CSV error:", err);
+        alert("Failed to load CSV — check console.");
       }
     });
 
-    // Bộ lọc
     function applyFilters() {
-      let showChocolate = document.getElementById("filterChocolate").checked;
-      let showStrawberry = document.getElementById("filterStrawberry").checked;
+      const showChoco = document.getElementById('filterChocolate').checked;
+      const showStraw = document.getElementById('filterStrawberry').checked;
 
-      allMarkers.forEach(obj => {
-        let { marker, data } = obj;
-        if (!data.lastUpdate) {
-          marker.addTo(map); // always show gray markers
+      allMarkers.forEach(m => {
+        const d = m.storeData;
+        if (!d.hasUpdate) {
+          if (!map.hasLayer(m)) map.addLayer(m);
           return;
         }
-
-        let visible = false;
-        if (data.chocolate && showChocolate) visible = true;
-        if (data.strawberry && showStrawberry) visible = true;
-
-        if (visible) {
-          marker.addTo(map);
-        } else {
-          map.removeLayer(marker);
-        }
+        const visible = (d.chocolate && showChoco) || (d.strawberry && showStraw);
+        visible ? map.addLayer(m) : map.removeLayer(m);
       });
     }
 
-    document.getElementById("filterChocolate").addEventListener("change", applyFilters);
-    document.getElementById("filterStrawberry").addEventListener("change", applyFilters);
+    document.getElementById('filterChocolate').addEventListener('change', applyFilters);
+    document.getElementById('filterStrawberry').addEventListener('change', applyFilters);
+
+    // Add legend
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = () => {
+      const div = L.DomUtil.create('div', 'legend');
+      div.innerHTML = `
+        <div><span class="dot" style="background:${COLORS.brown}"></span> Chocolate only</div>
+        <div><span class="dot" style="background:${COLORS.red}"></span> Strawberry only</div>
+        <div><span class="dot" style="background:${COLORS.green}"></span> Both flavors</div>
+        <div><span class="dot" style="background:${COLORS.grey}"></span> Not updated</div>
+      `;
+      return div;
+    };
+    legend.addTo(map);
   </script>
 </body>
 </html>
