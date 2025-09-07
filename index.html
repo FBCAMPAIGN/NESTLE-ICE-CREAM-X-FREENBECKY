@@ -22,8 +22,8 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
   <script>
-    // Tạo bản đồ mặc định ở Bangkok
-    const map = L.map('map').setView([13.736, 100.533], 12);
+    // Tạo bản đồ
+    const map = L.map('map').setView([13.736, 100.533], 12); // Bangkok mặc định
 
     // Thêm tile nền OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -31,10 +31,10 @@
       maxZoom: 19,
     }).addTo(map);
 
-    // Link CSV Google Sheet đã publish
+    // Link CSV public từ Google Sheet
     const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
 
-    // Load dữ liệu từ Google Sheet
+    // Tải và xử lý dữ liệu bằng PapaParse
     Papa.parse(sheetUrl, {
       download: true,
       header: true,
@@ -42,31 +42,34 @@
         results.data.forEach(row => {
           if (!row.Lat || !row.Lng) return;
 
-          // TRUE/FALSE từ Google Sheet checkbox
-          const choco = row.Chocolate === "TRUE" ? "🍫 Còn" : "🍫 Hết";
-          const straw = row.Strawberry === "TRUE" ? "🍓 Còn" : "🍓 Hết";
+          let status = row.Status ? row.Status.trim() : "Chưa update";
+          let lastUpdate = row["Last Update"] ? row["Last Update"].trim() : "Chưa có cập nhật";
 
-          // Nếu còn ít nhất 1 loại thì marker xanh, hết cả 2 thì marker đỏ
-          const stillAvailable = (row.Chocolate === "TRUE" || row.Strawberry === "TRUE");
+          let color;
+          if (status.toLowerCase().includes("còn")) {
+            color = "green";
+          } else if (status.toLowerCase().includes("hết")) {
+            color = "red";
+          } else {
+            color = "gray"; // chưa update
+          }
 
           const marker = L.circleMarker(
-            [parseFloat(row.Lat), parseFloat(row.Lng)], {
+            [parseFloat(row.Lat), parseFloat(row.Lng)],
+            {
+              color: color,
               radius: 8,
-              color: stillAvailable ? "green" : "red",
               fillOpacity: 0.8
             }
           ).addTo(map);
 
           marker.bindPopup(`
-            <b>${row.Store}</b><br>
-            ${choco}<br>
-            ${straw}<br>
-            <i>Cập nhật: ${row["Last Update"] || "N/A"}</i>
+            <b>${row.Name || "Không rõ"}</b><br>
+            Vị: ${row.Flavor || "Không rõ"}<br>
+            Tình trạng: ${status}<br>
+            Cập nhật: ${lastUpdate}
           `);
         });
-      },
-      error: function(err) {
-        console.error("Lỗi khi tải CSV:", err);
       }
     });
   </script>
