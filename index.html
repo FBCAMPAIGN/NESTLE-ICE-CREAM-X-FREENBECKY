@@ -1,69 +1,85 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>Bản đồ 7-11 – Kem FB</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nestle Ice Cream X FreenBecky</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
   <style>
-    #map { height: 100vh; width: 100%; }
-    .leaflet-popup-content { font-size: 14px; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    h2 {
+      margin: 10px 0;
+    }
+    #map {
+      height: 600px;
+      width: 100%;
+    }
   </style>
 </head>
 <body>
+  <h2>Bản đồ Nestle Ice Cream X FreenBecky</h2>
   <div id="map"></div>
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Code bản đồ -->
   <script>
-    // Tạo bản đồ mặc định ở Bangkok
-    const map = L.map('map').setView([13.736, 100.533], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
+    // Khởi tạo bản đồ tại Thái Lan
+    var map = L.map("map").setView([13.736717, 100.523186], 6);
+
+    // Thêm tile layer
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
     }).addTo(map);
 
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+    // Link Google Sheet CSV
+    var csvUrl =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vT0fz1VnY3Txq_Rx5hh6iE3tDkSmdw0xJ53wsYQjMYXvFQb0W5ED36XCUzpgECVODQ9YwGBl2XyoWqz/pub?gid=0&single=true&output=csv";
 
-    Papa.parse(sheetUrl, {
-      download: true,
-      header: true,
-      complete: function(results) {
-        results.data.forEach(row => {
-          if (!row.Lat || !row.Lng) return;
+    // Hàm đọc CSV
+    async function loadData() {
+      const response = await fetch(csvUrl);
+      const data = await response.text();
+      const rows = data.split("\n").slice(1);
 
-          const lat = parseFloat(row.Lat), lng = parseFloat(row.Lng);
-          if (isNaN(lat) || isNaN(lng)) return;
+      rows.forEach((row) => {
+        const cols = row.split(",");
 
-          // Nhận diện biểu tượng
-          const chocOK = row.Chocolate && row.Chocolate.includes("✅");
-          const strawOK = row.Strawberry && row.Strawberry.includes("✅");
+        // Cột trong Google Sheet (sắp xếp đúng thứ tự)
+        const store = cols[0];         // Tên cửa hàng
+        const lat = parseFloat(cols[1]); // Vĩ độ
+        const lng = parseFloat(cols[2]); // Kinh độ
+        const status = cols[3];        // Tình trạng
+        const lastUpdate = cols[4];    // Cập nhật cuối
 
-          const choco = chocOK ? "🍫 Còn" : "🍫 Hết";
-          const straw = strawOK ? "🍓 Còn" : "🍓 Hết";
+        if (!isNaN(lat) && !isNaN(lng)) {
+          let updateText =
+            lastUpdate && lastUpdate.trim() !== ""
+              ? lastUpdate
+              : "Chưa có cập nhật";
 
-          const lastUpdate = row["Last Update"] ? row["Last Update"].trim() : "Chưa có cập nhật";
+          L.marker([lat, lng])
+            .addTo(map)
+            .bindPopup(
+              `<b>${store}</b><br>Trạng thái: ${status}<br>Cập nhật: ${updateText}`
+            );
+        }
+      });
+    }
 
-          // Màu marker
-          const color = (chocOK || strawOK) ? "green" : "red";
-
-          L.circleMarker([lat, lng], {
-            color: color,
-            fillColor: color,
-            fillOpacity: 0.8,
-            radius: 8
-          }).addTo(map)
-            .bindPopup(`
-              <b>${row.Store || "Chi nhánh"}</b><br>
-              ${choco}<br>
-              ${straw}<br>
-              <i>Cập nhật: ${lastUpdate}</i>
-            `);
-        });
-      },
-      error: function(err) {
-        console.error("Lỗi tải CSV:", err);
-      }
-    });
+    loadData();
   </script>
 </body>
 </html>
