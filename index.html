@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Bản đồ 7-11 – Kem FB</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+    .leaflet-popup-content {
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    // Tạo bản đồ
+    const map = L.map('map').setView([13.736, 100.533], 12); // Tập trung vào Bangkok
+
+    // Thêm tile nền OpenStreetMap
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Link CSV public từ Google Sheet bạn cung cấp
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?output=csv";
+
+    // Tải và xử lý dữ liệu bằng PapaParse
+    Papa.parse(sheetUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        results.data.forEach(row => {
+          if (!row.Lat || !row.Lng) return;
+
+          // Chọn màu marker theo trạng thái "Còn" hoặc "Hết"
+          const color = row.Status && row.Status.toLowerCase().includes("còn") ? "green" : "red";
+
+          const marker = L.circleMarker(
+            [parseFloat(row.Lat), parseFloat(row.Lng)],
