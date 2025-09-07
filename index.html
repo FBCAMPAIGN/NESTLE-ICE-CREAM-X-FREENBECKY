@@ -1,29 +1,32 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>7-Eleven Ice Cream Stock</title>
+    <title>Store Locations with Flavors</title>
+    <meta charset="utf-8" />
     <style>
+      /* Full screen map */
       #map {
         height: 100vh;
         width: 100%;
       }
-      .filter-box {
+      #controls {
         position: absolute;
         top: 10px;
         left: 50%;
         transform: translateX(-50%);
         background: white;
-        padding: 10px;
+        padding: 8px 12px;
         border-radius: 8px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        z-index: 9999;
         font-family: Arial, sans-serif;
       }
     </style>
   </head>
   <body>
-    <div class="filter-box">
-      <label><input type="checkbox" id="chocoFilter" checked> 🍫 Chocolate</label>
-      <label><input type="checkbox" id="strawFilter" checked> 🍓 Strawberry</label>
+    <div id="controls">
+      <label><input type="checkbox" id="chocolate" checked> 🍫 Chocolate</label>
+      <label><input type="checkbox" id="strawberry" checked> 🍓 Strawberry</label>
     </div>
     <div id="map"></div>
 
@@ -31,66 +34,73 @@
       let map;
       let markers = [];
 
-      // Dữ liệu mẫu (có thể load từ Excel/Google Sheets)
+      // Sample data
       const stores = [
-        { name: "7-11 Siam Square", lat: 13.7464637, lng: 100.5309778, chocolate: true, strawberry: false, update: "2025-09-07" },
-        { name: "7-11 Silom", lat: 13.728, lng: 100.529, chocolate: false, strawberry: true, update: "2025-09-07" },
-        { name: "7-11 Sukhumvit", lat: 13.736, lng: 100.559, chocolate: true, strawberry: true, update: "2025-09-07" }
+        {
+          name: "7-11 Siam Square",
+          position: { lat: 13.7446, lng: 100.5346 },
+          chocolate: true,
+          strawberry: true,
+          lastUpdate: "2025-09-01"
+        },
+        {
+          name: "7-11 Silom",
+          position: { lat: 13.7283, lng: 100.5320 },
+          chocolate: false,
+          strawberry: true,
+          lastUpdate: ""
+        }
       ];
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
-          center: { lat: 13.736, lng: 100.523 },
-          zoom: 13,
+          center: { lat: 13.7367, lng: 100.5232 }, // Bangkok
+          zoom: 14,
         });
 
         renderMarkers();
 
-        document.getElementById("chocoFilter").addEventListener("change", renderMarkers);
-        document.getElementById("strawFilter").addEventListener("change", renderMarkers);
+        document.getElementById("chocolate").addEventListener("change", renderMarkers);
+        document.getElementById("strawberry").addEventListener("change", renderMarkers);
       }
 
       function renderMarkers() {
-        // Xóa marker cũ
-        markers.forEach(m => m.setMap(null));
+        // clear old markers
+        markers.forEach(m => m.map = null);
         markers = [];
 
-        const showChoco = document.getElementById("chocoFilter").checked;
-        const showStraw = document.getElementById("strawFilter").checked;
+        const showChoco = document.getElementById("chocolate").checked;
+        const showStraw = document.getElementById("strawberry").checked;
 
         stores.forEach(store => {
-          let hasChoco = store.chocolate && showChoco;
-          let hasStraw = store.strawberry && showStraw;
+          // nếu chưa cập nhật thì bỏ qua
+          if (!store.lastUpdate) return;
 
-          // Nếu cửa hàng không có bất kỳ hương vị nào trong filter thì ẩn
-          if (!hasChoco && !hasStraw) return;
+          const hasChoco = store.chocolate && showChoco;
+          const hasStraw = store.strawberry && showStraw;
 
-          // Sticker text
-          let flavors = "";
-          if (store.chocolate) flavors += "🍫";
-          if (store.strawberry) flavors += "🍓";
+          if (!(hasChoco || hasStraw)) return;
 
-          const marker = new google.maps.Marker({
-            position: { lat: store.lat, lng: store.lng },
-            map: map,
-            title: store.name,
-            label: {
-              text: flavors,
-              fontSize: "20px"
-            }
+          // hiển thị marker
+          const marker = new google.maps.marker.AdvancedMarkerElement({
+            position: store.position,
+            map,
+            title: store.name
           });
 
-          const infoWindow = new google.maps.InfoWindow({
+          const info = new google.maps.InfoWindow({
             content: `
-              <b>${store.name}</b><br>
-              ${store.chocolate ? "🍫 <span style='color:green'>✔</span>" : "🍫 <span style='color:red'>✘</span>"}<br>
-              ${store.strawberry ? "🍓 <span style='color:green'>✔</span>" : "🍓 <span style='color:red'>✘</span>"}<br>
-              Last Update: ${store.update || "<span style='color:gray'>Not updated</span>"}
+              <div>
+                <strong>${store.name}</strong><br/>
+                ${store.chocolate ? (showChoco ? "✅ 🍫" : "🍫") : "❌ 🍫"}<br/>
+                ${store.strawberry ? (showStraw ? "✅ 🍓" : "🍓") : "❌ 🍓"}<br/>
+                Last update: ${store.lastUpdate || "Not updated"}
+              </div>
             `
           });
 
-          marker.addListener("click", () => {
-            infoWindow.open(map, marker);
+          marker.addListener("gmp-click", () => {
+            info.open({ anchor: marker, map });
           });
 
           markers.push(marker);
@@ -98,6 +108,9 @@
       }
     </script>
 
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
+    <!-- Google Maps API -->
+    <script async
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDZmPZumvIxf0fNj32TBO6HoXGAi-N0X7g&callback=initMap">
+    </script>
   </body>
 </html>
