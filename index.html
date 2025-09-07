@@ -20,8 +20,14 @@
       background: #f8f9fa;
       border-bottom: 1px solid #ddd;
     }
+    #controls {
+      text-align: center;
+      padding: 8px;
+      background: #fff;
+      border-bottom: 1px solid #ddd;
+    }
     #map {
-      height: calc(100vh - 50px);
+      height: calc(100vh - 90px);
       width: 100%;
     }
     .popup-content {
@@ -41,6 +47,16 @@
 </head>
 <body>
   <h2>🍦 Nestle Ice Cream X FreenBecky</h2>
+  <div id="controls">
+    <label>
+      <input type="checkbox" id="filterChocolate" checked />
+      🍫 Chocolate
+    </label>
+    <label>
+      <input type="checkbox" id="filterStrawberry" checked />
+      🍓 Strawberry
+    </label>
+  </div>
   <div id="map"></div>
 
   <!-- Leaflet JS -->
@@ -49,68 +65,131 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
   <script>
-    // Khởi tạo bản đồ
     var map = L.map("map").setView([13.736717, 100.523186], 6);
-
-    // Layer OSM
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
     }).addTo(map);
 
-    // CSV URL
     var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
 
-    // Load CSV bằng PapaParse
+    var allMarkers = [];
+
+    // Tạo icon màu
+    function createIcon(color) {
+      return new L.Icon({
+        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      });
+    }
+
+    var icons = {
+      brown: createIcon("brown"),   // Chocolate
+      red: createIcon("red"),       // Strawberry
+      green: createIcon("green"),   // Both
+    };
+
+    // Hàm tạo marker
+    function createMarker(row) {
+      let store = row["Store"] || "";
+      let lat = parseFloat(row["Lat"]);
+      let lng = parseFloat(row["Lng"]);
+      let chocolate = (row["Chocolate"] || "").toLowerCase() === "true";
+      let strawberry = (row["Strawberry"] || "").toLowerCase() === "true";
+      let lastUpdate = row["Last Update"] || "";
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        let content = `<div class="popup-content"><b>${store}</b><br>`;
+
+        if (lastUpdate && lastUpdate.trim() !== "" && lastUpdate.toLowerCase() !== "false") {
+          content += `<div><b>Last Update:</b> ${lastUpdate}</div>`;
+
+          content += `<div class="status">
+            <img src="https://img.icons8.com/emoji/48/chocolate-bar.png" />
+            ${chocolate ? '<span style="color:green;">✔</span>' : '<span style="color:red;">✘</span>'}
+          </div>`;
+
+          content += `<div class="status">
+            <img src="https://img.icons8.com/emoji/48/strawberry.png" />
+            ${strawberry ? '<span style="color:green;">✔</span>' : '<span style="color:red;">✘</span>'}
+          </div>`;
+        } else {
+          content += `<div><b>Last Update:</b> Not updated yet</div>`;
+        }
+
+        content += `</div>`;
+
+        // Chọn màu icon
+        let iconType;
+        if (chocolate && strawberry) {
+          iconType = icons.green;
+        } else if (chocolate) {
+          iconType = icons.brown;
+        } else if (strawberry) {
+          iconType = icons.red;
+        } else {
+          iconType = icons.red; // fallback
+        }
+
+        let marker = L.marker([lat, lng], { icon: iconType }).bindPopup(content);
+        marker.storeData = { chocolate, strawberry, lastUpdate };
+        return marker;
+      }
+      return null;
+    }
+
+    // Load CSV
     Papa.parse(csvUrl, {
       download: true,
       header: true,
       complete: function(results) {
-        console.log("CSV data:", results.data); // Debug
-
         let markers = [];
         results.data.forEach(row => {
-          let store = row["Store"] || row["store"] || "";
-          let lat = parseFloat(row["Lat"] || row["lat"]);
-          let lng = parseFloat(row["Lng"] || row["lng"]);
-          let chocolate = (row["Chocolate"] || "").toLowerCase() === "true";
-          let strawberry = (row["Strawberry"] || "").toLowerCase() === "true";
-          let lastUpdate = row["Last Update"] || "";
-
-          if (!isNaN(lat) && !isNaN(lng)) {
-            let content = `<div class="popup-content"><b>${store}</b><br>`;
-
-            if (lastUpdate && lastUpdate.trim() !== "" && lastUpdate.toLowerCase() !== "false") {
-              content += `<div><b>Last Update:</b> ${lastUpdate}</div>`;
-
-              // Chocolate status
-              content += `<div class="status">
-                <img src="https://img.icons8.com/emoji/48/chocolate-bar.png" />
-                ${chocolate ? '<span style="color:green;">✔</span>' : '<span style="color:red;">✘</span>'}
-              </div>`;
-
-              // Strawberry status
-              content += `<div class="status">
-                <img src="https://img.icons8.com/emoji/48/strawberry.png" />
-                ${strawberry ? '<span style="color:green;">✔</span>' : '<span style="color:red;">✘</span>'}
-              </div>`;
-            } else {
-              content += `<div><b>Last Update:</b> Not updated yet</div>`;
-            }
-
-            content += `</div>`;
-
-            let marker = L.marker([lat, lng]).addTo(map).bindPopup(content);
+          let marker = createMarker(row);
+          if (marker) {
             markers.push(marker);
+            allMarkers.push(marker);
+            marker.addTo(map);
           }
         });
 
-        // Fit map bounds to markers
         if (markers.length > 0) {
           let group = new L.featureGroup(markers);
           map.fitBounds(group.getBounds());
         }
       }
     });
+
+    // Bộ lọc
+    function applyFilters() {
+      let showChocolate = document.getElementById("filterChocolate").checked;
+      let showStrawberry = document.getElementById("filterStrawberry").checked;
+
+      allMarkers.forEach(marker => {
+        let { chocolate, strawberry, lastUpdate } = marker.storeData;
+
+        if (!lastUpdate || lastUpdate.trim() === "" || lastUpdate.toLowerCase() === "false") {
+          map.removeLayer(marker);
+          return;
+        }
+
+        let visible = false;
+        if (chocolate && showChocolate) visible = true;
+        if (strawberry && showStrawberry) visible = true;
+
+        if (visible) {
+          map.addLayer(marker);
+        } else {
+          map.removeLayer(marker);
+        }
+      });
+    }
+
+    document.getElementById("filterChocolate").addEventListener("change", applyFilters);
+    document.getElementById("filterStrawberry").addEventListener("change", applyFilters);
   </script>
 </body>
 </html>
