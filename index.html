@@ -1,57 +1,69 @@
-<script>
-  // Tạo bản đồ
-  const map = L.map('map').setView([13.736, 100.533], 12);
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Bản đồ 7-11 – Kem FB</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    #map { height: 100vh; width: 100%; }
+    .leaflet-popup-content { font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script>
+    // Tạo bản đồ mặc định ở Bangkok
+    const map = L.map('map').setView([13.736, 100.533], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
-    maxZoom: 19,
-  }).addTo(map);
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
 
-  const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+    Papa.parse(sheetUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        results.data.forEach(row => {
+          if (!row.Lat || !row.Lng) return;
 
-  Papa.parse(sheetUrl, {
-    download: true,
-    header: true,
-    complete: function(results) {
-      results.data.forEach(row => {
-        if (!row.Lat || !row.Lng) return;
+          const lat = parseFloat(row.Lat), lng = parseFloat(row.Lng);
+          if (isNaN(lat) || isNaN(lng)) return;
 
-        // Lấy cột Last Update (bất kể viết thế nào)
-        let lastUpdate = "";
-        for (const key in row) {
-          if (key.toLowerCase().includes("last update")) {
-            lastUpdate = row[key] ? row[key].trim() : "";
-          }
-        }
-        if (!lastUpdate) lastUpdate = "Chưa có cập nhật";
+          // Nhận diện biểu tượng
+          const chocOK = row.Chocolate && row.Chocolate.includes("✅");
+          const strawOK = row.Strawberry && row.Strawberry.includes("✅");
 
-        let status = row.Status ? row.Status.trim() : "Chưa update";
+          const choco = chocOK ? "🍫 Còn" : "🍫 Hết";
+          const straw = strawOK ? "🍓 Còn" : "🍓 Hết";
 
-        let color;
-        if (status.toLowerCase().includes("còn")) {
-          color = "green";
-        } else if (status.toLowerCase().includes("hết")) {
-          color = "red";
-        } else {
-          color = "gray"; // chưa update
-        }
+          const lastUpdate = row["Last Update"] ? row["Last Update"].trim() : "Chưa có cập nhật";
 
-        const marker = L.circleMarker(
-          [parseFloat(row.Lat), parseFloat(row.Lng)],
-          {
+          // Màu marker
+          const color = (chocOK || strawOK) ? "green" : "red";
+
+          L.circleMarker([lat, lng], {
             color: color,
-            radius: 8,
-            fillOpacity: 0.8
-          }
-        ).addTo(map);
-
-        marker.bindPopup(`
-          <b>${row.Name || "Không rõ"}</b><br>
-          Vị: ${row.Flavor || "Không rõ"}<br>
-          Tình trạng: ${status}<br>
-          Cập nhật: ${lastUpdate}
-        `);
-      });
-    }
-  });
-</script>
+            fillColor: color,
+            fillOpacity: 0.8,
+            radius: 8
+          }).addTo(map)
+            .bindPopup(`
+              <b>${row.Store || "Chi nhánh"}</b><br>
+              ${choco}<br>
+              ${straw}<br>
+              <i>Cập nhật: ${lastUpdate}</i>
+            `);
+        });
+      },
+      error: function(err) {
+        console.error("Lỗi tải CSV:", err);
+      }
+    });
+  </script>
+</body>
+</html>
