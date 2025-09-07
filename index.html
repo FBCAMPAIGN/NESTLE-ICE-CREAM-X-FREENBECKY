@@ -11,19 +11,25 @@
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   />
   <style>
-    body {
-      font-family: Arial, sans-serif;
+    html, body {
+      height: 100%;
       margin: 0;
       padding: 0;
-      text-align: center;
+      font-family: Arial, sans-serif;
     }
     h2 {
-      margin: 10px 0;
+      margin: 0;
+      padding: 10px;
+      text-align: center;
+      background: #f8f8f8;
+      border-bottom: 1px solid #ccc;
     }
     #map {
-      height: 600px;
+      height: calc(100vh - 50px); /* full màn hình trừ phần tiêu đề */
       width: 100%;
     }
+    .green { color: green; font-weight: bold; }
+    .red { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -34,14 +40,12 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    // Initialize map
     var map = L.map("map").setView([13.736717, 100.523186], 12);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
     }).addTo(map);
 
-    // Google Sheet CSV
     var csvUrl =
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
 
@@ -62,22 +66,18 @@
         const lastUpdate = cols[5];
 
         if (!isNaN(lat) && !isNaN(lng)) {
-          // Flavor status
-          let flavors = [];
-          flavors.push("Chocolate: " + (chocolate ? "Available" : "Out of stock"));
-          flavors.push("Strawberry: " + (strawberry ? "Available" : "Out of stock"));
+          let popupContent = `<b>${store}</b><br>`;
 
-          // Last update status
-          let updateText = lastUpdate && lastUpdate.trim() !== "" 
-            ? lastUpdate 
-            : "Not updated";
+          if (lastUpdate && lastUpdate.trim() !== "") {
+            let flavors = [];
+            flavors.push("🍫 " + (chocolate ? "<span class='green'>✅</span>" : "<span class='red'>❌</span>"));
+            flavors.push("🍓 " + (strawberry ? "<span class='green'>✅</span>" : "<span class='red'>❌</span>"));
+            popupContent += flavors.join("<br>") + `<br>Last update: ${lastUpdate}`;
+          } else {
+            popupContent += "Not updated";
+          }
 
-          // Marker
-          L.marker([lat, lng])
-            .addTo(map)
-            .bindPopup(
-              `<b>${store}</b><br>${flavors.join("<br>")}<br>Last update: ${updateText}`
-            );
+          L.marker([lat, lng]).addTo(map).bindPopup(popupContent);
         }
       });
     }
