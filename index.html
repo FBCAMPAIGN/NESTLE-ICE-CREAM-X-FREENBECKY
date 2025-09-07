@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nestle Ice Cream X FreenBecky</title>
+  <title>Bản đồ Nestle Ice Cream X FreenBecky</title>
 
   <!-- Leaflet CSS -->
   <link
@@ -33,50 +33,62 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Code bản đồ -->
   <script>
-    // Khởi tạo bản đồ tại Thái Lan
+    // 1. Khởi tạo bản đồ (Trung tâm là Thái Lan)
     var map = L.map("map").setView([13.736717, 100.523186], 6);
 
-    // Thêm tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
     }).addTo(map);
 
-    // Link Google Sheet CSV
+    // 2. Link Google Sheet CSV đã publish
     var csvUrl =
-      "https://docs.google.com/spreadsheets/d/e/2PACX-1vT0fz1VnY3Txq_Rx5hh6iE3tDkSmdw0xJ53wsYQjMYXvFQb0W5ED36XCUzpgECVODQ9YwGBl2XyoWqz/pub?gid=0&single=true&output=csv";
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
 
-    // Hàm đọc CSV
+    // 3. Fetch CSV và xử lý
     async function loadData() {
-      const response = await fetch(csvUrl);
-      const data = await response.text();
-      const rows = data.split("\n").slice(1);
-
-      rows.forEach((row) => {
-        const cols = row.split(",");
-
-        // Cột trong Google Sheet (sắp xếp đúng thứ tự)
-        const store = cols[0];         // Tên cửa hàng
-        const lat = parseFloat(cols[1]); // Vĩ độ
-        const lng = parseFloat(cols[2]); // Kinh độ
-        const status = cols[3];        // Tình trạng
-        const lastUpdate = cols[4];    // Cập nhật cuối
-
-        if (!isNaN(lat) && !isNaN(lng)) {
-          let updateText =
-            lastUpdate && lastUpdate.trim() !== ""
-              ? lastUpdate
-              : "Chưa có cập nhật";
-
-          L.marker([lat, lng])
-            .addTo(map)
-            .bindPopup(
-              `<b>${store}</b><br>Trạng thái: ${status}<br>Cập nhật: ${updateText}`
-            );
+      try {
+        const response = await fetch(csvUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      });
+        const text = await response.text();
+        const lines = text.trim().split("\n");
+        const headers = lines[0].split(",").map(h => h.trim());
+
+        // Đảm bảo header hợp lệ
+        console.log("Headers:", headers);
+
+        lines.slice(1).forEach((line, index) => {
+          const cols = line.split(",").map(c => c.trim());
+          if (cols.length < headers.length) {
+            console.warn(`Dòng ${index + 2} bị thiếu dữ liệu:`, cols);
+            return;
+          }
+
+          // Giả sử thứ tự cột: Store,Lat,Lng,Status,LastUpdate
+          const store = cols[0];
+          const lat = parseFloat(cols[1]);
+          const lng = parseFloat(cols[2]);
+          const status = cols[3] || "Không rõ";
+          const lastUpdate = cols[4] || "";
+
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const updateText = lastUpdate || "Chưa có cập nhật";
+            L.marker([lat, lng])
+              .addTo(map)
+              .bindPopup(
+                `<b>${store}</b><br>Trạng thái: ${status}<br>Cập nhật: ${updateText}`
+              );
+          } else {
+            console.warn(`Toạ độ không hợp lệ ở dòng ${index + 2}:`, cols);
+          }
+        });
+      } catch (err) {
+        console.error("Không load được CSV:", err);
+        alert("Lỗi khi tải dữ liệu CSV! Mở console để xem chi tiết.");
+      }
     }
 
     loadData();
