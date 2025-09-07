@@ -1,116 +1,116 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Store Locations with Flavors</title>
-    <meta charset="utf-8" />
-    <style>
-      /* Full screen map */
-      #map {
-        height: 100vh;
-        width: 100%;
-      }
-      #controls {
-        position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: white;
-        padding: 8px 12px;
-        border-radius: 8px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        z-index: 9999;
-        font-family: Arial, sans-serif;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="controls">
-      <label><input type="checkbox" id="chocolate" checked> 🍫 Chocolate</label>
-      <label><input type="checkbox" id="strawberry" checked> 🍓 Strawberry</label>
-    </div>
-    <div id="map"></div>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nestle Ice Cream X FreenBecky</title>
 
-    <script>
-      let map;
-      let markers = [];
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+    h2 {
+      text-align: center;
+      padding: 10px;
+      margin: 0;
+      background: #f8f9fa;
+      border-bottom: 1px solid #ddd;
+    }
+    #map {
+      height: calc(100vh - 50px);
+      width: 100%;
+    }
+    .popup-content {
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .status img {
+      width: 18px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h2>🍦 Nestle Ice Cream X FreenBecky</h2>
+  <div id="map"></div>
 
-      // Sample data
-      const stores = [
-        {
-          name: "7-11 Siam Square",
-          position: { lat: 13.7446, lng: 100.5346 },
-          chocolate: true,
-          strawberry: true,
-          lastUpdate: "2025-09-01"
-        },
-        {
-          name: "7-11 Silom",
-          position: { lat: 13.7283, lng: 100.5320 },
-          chocolate: false,
-          strawberry: true,
-          lastUpdate: ""
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- PapaParse -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <script>
+    // Khởi tạo bản đồ
+    var map = L.map("map").setView([13.736717, 100.523186], 6);
+
+    // Layer OSM
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    // CSV URL
+    var csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIfTQc169pc5cSpkMIj0c9k2ZzNHZkptMZS68ebzx0i22WOft68xqypJeDJhU70r2yRwTxzIBjQOJW/pub?gid=0&single=true&output=csv";
+
+    // Load CSV bằng PapaParse
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      complete: function(results) {
+        console.log("CSV data:", results.data); // Debug
+
+        let markers = [];
+        results.data.forEach(row => {
+          let store = row["Store"] || row["store"] || "";
+          let lat = parseFloat(row["Lat"] || row["lat"]);
+          let lng = parseFloat(row["Lng"] || row["lng"]);
+          let chocolate = (row["Chocolate"] || "").toLowerCase() === "true";
+          let strawberry = (row["Strawberry"] || "").toLowerCase() === "true";
+          let lastUpdate = row["Last Update"] || "";
+
+          if (!isNaN(lat) && !isNaN(lng)) {
+            let content = `<div class="popup-content"><b>${store}</b><br>`;
+
+            if (lastUpdate && lastUpdate.trim() !== "" && lastUpdate.toLowerCase() !== "false") {
+              content += `<div><b>Last Update:</b> ${lastUpdate}</div>`;
+
+              // Chocolate status
+              content += `<div class="status">
+                <img src="https://img.icons8.com/emoji/48/chocolate-bar.png" />
+                ${chocolate ? '<span style="color:green;">✔</span>' : '<span style="color:red;">✘</span>'}
+              </div>`;
+
+              // Strawberry status
+              content += `<div class="status">
+                <img src="https://img.icons8.com/emoji/48/strawberry.png" />
+                ${strawberry ? '<span style="color:green;">✔</span>' : '<span style="color:red;">✘</span>'}
+              </div>`;
+            } else {
+              content += `<div><b>Last Update:</b> Not updated yet</div>`;
+            }
+
+            content += `</div>`;
+
+            let marker = L.marker([lat, lng]).addTo(map).bindPopup(content);
+            markers.push(marker);
+          }
+        });
+
+        // Fit map bounds to markers
+        if (markers.length > 0) {
+          let group = new L.featureGroup(markers);
+          map.fitBounds(group.getBounds());
         }
-      ];
-
-      function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
-          center: { lat: 13.7367, lng: 100.5232 }, // Bangkok
-          zoom: 14,
-        });
-
-        renderMarkers();
-
-        document.getElementById("chocolate").addEventListener("change", renderMarkers);
-        document.getElementById("strawberry").addEventListener("change", renderMarkers);
       }
-
-      function renderMarkers() {
-        // clear old markers
-        markers.forEach(m => m.map = null);
-        markers = [];
-
-        const showChoco = document.getElementById("chocolate").checked;
-        const showStraw = document.getElementById("strawberry").checked;
-
-        stores.forEach(store => {
-          // nếu chưa cập nhật thì bỏ qua
-          if (!store.lastUpdate) return;
-
-          const hasChoco = store.chocolate && showChoco;
-          const hasStraw = store.strawberry && showStraw;
-
-          if (!(hasChoco || hasStraw)) return;
-
-          // hiển thị marker
-          const marker = new google.maps.marker.AdvancedMarkerElement({
-            position: store.position,
-            map,
-            title: store.name
-          });
-
-          const info = new google.maps.InfoWindow({
-            content: `
-              <div>
-                <strong>${store.name}</strong><br/>
-                ${store.chocolate ? (showChoco ? "✅ 🍫" : "🍫") : "❌ 🍫"}<br/>
-                ${store.strawberry ? (showStraw ? "✅ 🍓" : "🍓") : "❌ 🍓"}<br/>
-                Last update: ${store.lastUpdate || "Not updated"}
-              </div>
-            `
-          });
-
-          marker.addListener("gmp-click", () => {
-            info.open({ anchor: marker, map });
-          });
-
-          markers.push(marker);
-        });
-      }
-    </script>
-
-    <!-- Google Maps API -->
-    <script async
-      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDZmPZumvIxf0fNj32TBO6HoXGAi-N0X7g&callback=initMap">
-    </script>
-  </body>
+    });
+  </script>
+</body>
 </html>
